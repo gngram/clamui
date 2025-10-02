@@ -16,6 +16,8 @@ pkgs.mkShell {
     gtk4
     gobject-introspection
     wayland
+    vim
+    geany
   ];
 
   shellHook = ''
@@ -26,6 +28,7 @@ pkgs.mkShell {
       source .venv/bin/activate
     fi
     echo "Welcome to usb-passthrough-manager development environment!"
+    #pip install .
   '';
 }
 

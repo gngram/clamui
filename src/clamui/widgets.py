@@ -36,7 +36,7 @@ class Card(Gtk.Box):
     def __init__(self, title: str):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.add_css_class("card")
-        title_lbl = Gtk.Label(label=title, xalign=Gtk.Align.CENTER)
+        title_lbl = Gtk.Label(label=title, xalign=0.5)
         title_lbl.add_css_class("card-title")
         self.append(title_lbl)
         self.body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
@@ -55,11 +55,11 @@ class IconSideBar(Gtk.Box):
             self.append(b)
 
 class SimpleList(Gtk.ScrolledWindow):
-    def __init__(self):
+    def __init__(self, height = 300):
         super().__init__()
         self.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         self.listbox = Gtk.ListBox()
-        self.set_size_request(-1, 300)
+        self.set_size_request(-1, height)
         self.set_child(self.listbox)
 
     def set_items(self, items: Iterable[str]):
@@ -97,9 +97,7 @@ class CommonStatusBadge(Gtk.Box):
     def set_status(self, status, details=""):
         status_config = {
             "running": ("🟢"),
-            "failed": ("🔴"),
-            "enabled": ("🟡"),
-            "offline": ("⚪"),
+            "offline": ("🔴"),
             "healthy": ("🛡️"),
             "infected": ("💀"),
             "warning": ("⚠️"),

@@ -1,88 +1,57 @@
 from __future__ import annotations
 import re, time
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Tuple, List
 
-LOG_SUMMARY_SEP = re.compile(r"^-+ SCAN SUMMARY -+$")
-KV_LINE = re.compile(r"^([^:]+):\s*(.*)$")
-INFECTED_PATTERN = re.compile(r"^(.*?):.*?FOUND$")
+INFECTED_PATTERN = re.compile(r"^.*->\s+([^:]+):.*FOUND$")
 
-@dataclass
-class ScanSummary:
-    engine: Optional[str] = None
-    known_viruses: Optional[int] = None
-    scanned_dirs: Optional[int] = None
-    scanned_files: Optional[int] = None
-    infected: Optional[int] = None
-    data_scanned: Optional[str] = None
-    data_read: Optional[str] = None
-    time_taken: Optional[str] = None
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
-    when: Optional[datetime] = None
+import re
 
-    @property
-    def ok(self) -> Optional[bool]:
-        return None if self.infected is None else self.infected == 0
-
-def _to_int(v: Optional[str]) -> Optional[int]:
-    try:
-        return int(v.replace(",", "")) if v is not None else None
-    except Exception:
-        return None
-
-def parse_scan_summary_block(block_lines: List[str]) -> ScanSummary:
-    kv: dict[str, str] = {}
-    for line in block_lines:
-        m = KV_LINE.match(line.strip())
-        if m:
-            key, val = m.group(1).strip(), m.group(2).strip()
-            kv[key] = val
-    when = None
-    if "End Date" in kv:
-        try:
-            when = datetime.fromtimestamp(
-                time.mktime(time.strptime(kv["End Date"], "%a %b %d %H:%M:%S %Y"))
-            )
-        except Exception:
-            pass
-    return ScanSummary(
-        engine=kv.get("Engine version"),
-        known_viruses=_to_int(kv.get("Known viruses")),
-        scanned_dirs=_to_int(kv.get("Scanned directories")),
-        scanned_files=_to_int(kv.get("Scanned files")),
-        infected=_to_int(kv.get("Infected files")),
-        data_scanned=kv.get("Data scanned"),
-        data_read=kv.get("Data read"),
-        time_taken=kv.get("Time"),
-        start_date=kv.get("Start Date"),
-        end_date=kv.get("End Date"),
-        when=when,
-    )
-
-def parse_latest_summary_from_log(log_path: str) -> Tuple[Optional[ScanSummary], Optional[str]]:
-    try:
-        content = Path(log_path).read_text(errors="ignore")
-    except Exception as e:
-        return None, f"Failed to read log: {e}"
-    lines = content.splitlines()
-
-    blocks: List[List[str]] = []
-    i = 0
-    while i < len(lines):
-        if LOG_SUMMARY_SEP.match(lines[i].strip()):
-            j = i + 1
-            block: List[str] = []
-            while j < len(lines) and not LOG_SUMMARY_SEP.match(lines[j].strip()):
-                block.append(lines[j]); j += 1
-            blocks.append(block); i = j
+def parse_freshclam_log(log_text):
+    summary = {
+        'last_update': '',
+        'components': {}
+    }
+    summary_str = []
+    
+    update_time_pattern = r'^(\w+ \w+ \s*\d+ \d{2}:\d{2}:\d{2} \d{4}) -> ClamAV update process started'
+    component_pattern = r'-> (\w+\.\w+) database is (up-to-date|outdated) \(version: (\d+), sigs: ([\d,]+), f-level: (\d+), builder: (\w+)\)'
+    
+    reversed_lines = list(reversed(log_text))
+    
+    component_log = reversed_lines[0:3]
+    
+    for i, line in enumerate(reversed_lines[3:]):
+        update_time_match = re.search(update_time_pattern, line)
+        if update_time_match:
+            summary_str.append(f"<b>UPDATER:</b> FreshClam")
+            summary_str.append(f"<b>LAST UPDATE:</b> {update_time_match.group(1)}")
+            break
         else:
-            i += 1
-    if not blocks:
-        return None, "No SCAN SUMMARY found in log. Run a scan to generate one."
-    return parse_scan_summary_block(blocks[-1]), None
+            component_log.append(line)
+    
+    # Find all component statuses
+    component_matches = re.findall(component_pattern, "\n".join(component_log))
+    
+    for match in component_matches:
+        component_name, status, version, _signatures, _f_level, _builder = match
+        summary['components'][component_name] = {
+            'status': status,
+            'version': version,
+        }
+        
+    if summary['components']:
+        summary_str.append("\n<b>COMPONENTS:</b>")
+        for component, details in summary['components'].items():
+            status_icon = "✅ " if details['status'] == 'up-to-date' else "❌"
+            summary_str.append(f"{status_icon} {component}  (Version: {details['version']})")
+
+    if len(summary_str) == 0:             
+        summary_str.append("Last Update: Not found in log")
+        
+    return summary_str
+
 
 def parse_infected_files_from_text(text: str) -> List[str]:
     """Parse infected file paths from clamdscan output text."""
